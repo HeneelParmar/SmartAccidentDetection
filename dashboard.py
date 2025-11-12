@@ -48,7 +48,6 @@ def init_firebase():
             
             # Handle escaped JSON strings (common in environment variables)
             json_str = json_str.replace('\\"', '"').replace("\\'", "'")
-            json_str = json_str.replace('\\n', '\n').replace('\\t', '\t')
             
             # Try to find the first { character in case there's a prefix
             first_brace = json_str.find('{')
