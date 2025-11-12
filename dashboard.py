@@ -5,15 +5,25 @@ import firebase_admin
 from firebase_admin import credentials, db
 from datetime import datetime
 import uuid  # for unique chart IDs
+import os
+import json
 
 # -------------------------
 # Firebase initialization
 # -------------------------
-SERVICE_KEY = "serviceAccountKey.json"
-DATABASE_URL = "https://accident-detection-syste-7f774-default-rtdb.asia-southeast1.firebasedatabase.app"
+SERVICE_ACCOUNT_JSON = os.getenv('SERVICE_ACCOUNT_JSON')
+DATABASE_URL = os.getenv('DATABASE_URL')
+
+if not SERVICE_ACCOUNT_JSON:
+    st.error("SERVICE_ACCOUNT_JSON environment variable is not set")
+    st.stop()
+if not DATABASE_URL:
+    st.error("DATABASE_URL environment variable is not set")
+    st.stop()
 
 if not firebase_admin._apps:
-    cred = credentials.Certificate(SERVICE_KEY)
+    service_account_info = json.loads(SERVICE_ACCOUNT_JSON)
+    cred = credentials.Certificate(service_account_info)
     firebase_admin.initialize_app(cred, {'databaseURL': DATABASE_URL})
 
 # -------------------------

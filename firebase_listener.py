@@ -5,12 +5,20 @@ import joblib
 import numpy as np
 import time
 import os
+import json
 
-SERVICE_KEY = "serviceAccountKey.json"
-DATABASE_URL = "https://accident-detection-syste-7f774-default-rtdb.asia-southeast1.firebasedatabase.app"
+# Read from environment variables
+SERVICE_ACCOUNT_JSON = os.getenv('SERVICE_ACCOUNT_JSON')
+DATABASE_URL = os.getenv('DATABASE_URL')
 
-# init
-cred = credentials.Certificate(SERVICE_KEY)
+if not SERVICE_ACCOUNT_JSON:
+    raise ValueError("SERVICE_ACCOUNT_JSON environment variable is not set")
+if not DATABASE_URL:
+    raise ValueError("DATABASE_URL environment variable is not set")
+
+# Parse JSON string and create credentials
+service_account_info = json.loads(SERVICE_ACCOUNT_JSON)
+cred = credentials.Certificate(service_account_info)
 firebase_admin.initialize_app(cred, {'databaseURL': DATABASE_URL})
 
 # load model
