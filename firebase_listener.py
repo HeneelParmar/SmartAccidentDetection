@@ -39,9 +39,11 @@ try:
     if last_brace >= 0 and last_brace < len(json_str) - 1:
         json_str = json_str[:last_brace + 1]
     
-    service_account_info = json.loads(json_str)
+    # Decode JSON and fix PEM newlines
+    service_account_info = json.loads(json_str.replace("\\n", "\n"))
     cred = credentials.Certificate(service_account_info)
     firebase_admin.initialize_app(cred, {'databaseURL': DATABASE_URL})
+
 except json.JSONDecodeError as e:
     print(f"ERROR: Failed to parse SERVICE_ACCOUNT_JSON: {str(e)}")
     print(f"First 200 chars: {SERVICE_ACCOUNT_JSON[:200] if SERVICE_ACCOUNT_JSON else 'None'}")
