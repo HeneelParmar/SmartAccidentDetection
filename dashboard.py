@@ -59,9 +59,14 @@ def init_firebase():
             if last_brace >= 0 and last_brace < len(json_str) - 1:
                 json_str = json_str[:last_brace + 1]
             
-            service_account_info = json.loads(json_str)
+            # Decode JSON and fix PEM newlines
+            service_account_info = json.loads(json_str.replace("\\n", "\n"))
             cred = credentials.Certificate(service_account_info)
             firebase_admin.initialize_app(cred, {'databaseURL': DATABASE_URL})
+        else:
+            # Reuse existing app
+            cred = firebase_admin.credentials.Certificate(firebase_admin.credentials.ApplicationDefault())
+
         
         _firebase_initialized = True
         return True
