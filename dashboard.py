@@ -1,61 +1,77 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-import firebase_admin
-from firebase_admin import credentials, db
 from datetime import datetime
 import uuid  # for unique chart IDs
 import os
 import json
 
 # -------------------------
-# Firebase initialization
+# Firebase initialization (lazy loading)
 # -------------------------
-SERVICE_ACCOUNT_JSON = os.getenv('SERVICE_ACCOUNT_JSON')
-DATABASE_URL = os.getenv('DATABASE_URL')
+_firebase_initialized = False
+_firebase_error = None
 
-if not SERVICE_ACCOUNT_JSON:
-    st.error("SERVICE_ACCOUNT_JSON environment variable is not set")
-    st.stop()
-if not DATABASE_URL:
-    st.error("DATABASE_URL environment variable is not set")
-    st.stop()
-
-if not firebase_admin._apps:
+def init_firebase():
+    """Initialize Firebase connection lazily"""
+    global _firebase_initialized, _firebase_error
+    
+    if _firebase_initialized:
+        return True
+    
+    if _firebase_error is not None:
+        return False
+    
     try:
-        # Strip whitespace
-        json_str = SERVICE_ACCOUNT_JSON.strip()
+        import firebase_admin
+        from firebase_admin import credentials, db
         
-        # Remove surrounding quotes if present (single or double)
-        if (json_str.startswith('"') and json_str.endswith('"')) or \
-           (json_str.startswith("'") and json_str.endswith("'")):
-            json_str = json_str[1:-1]
+        SERVICE_ACCOUNT_JSON = os.getenv('SERVICE_ACCOUNT_JSON')
+        DATABASE_URL = os.getenv('DATABASE_URL')
         
-        # Handle escaped JSON strings (common in environment variables)
-        json_str = json_str.replace('\\"', '"').replace("\\'", "'")
-        json_str = json_str.replace('\\n', '\n').replace('\\t', '\t')
+        if not SERVICE_ACCOUNT_JSON:
+            _firebase_error = "SERVICE_ACCOUNT_JSON environment variable is not set"
+            return False
         
-        # Try to find the first { character in case there's a prefix
-        first_brace = json_str.find('{')
-        if first_brace > 0:
-            json_str = json_str[first_brace:]
+        if not DATABASE_URL:
+            _firebase_error = "DATABASE_URL environment variable is not set"
+            return False
         
-        # Find the last } character in case there's a suffix
-        last_brace = json_str.rfind('}')
-        if last_brace >= 0 and last_brace < len(json_str) - 1:
-            json_str = json_str[:last_brace + 1]
+        if not firebase_admin._apps:
+            # Strip whitespace
+            json_str = SERVICE_ACCOUNT_JSON.strip()
+            
+            # Remove surrounding quotes if present (single or double)
+            if (json_str.startswith('"') and json_str.endswith('"')) or \
+               (json_str.startswith("'") and json_str.endswith("'")):
+                json_str = json_str[1:-1]
+            
+            # Handle escaped JSON strings (common in environment variables)
+            json_str = json_str.replace('\\"', '"').replace("\\'", "'")
+            json_str = json_str.replace('\\n', '\n').replace('\\t', '\t')
+            
+            # Try to find the first { character in case there's a prefix
+            first_brace = json_str.find('{')
+            if first_brace > 0:
+                json_str = json_str[first_brace:]
+            
+            # Find the last } character in case there's a suffix
+            last_brace = json_str.rfind('}')
+            if last_brace >= 0 and last_brace < len(json_str) - 1:
+                json_str = json_str[:last_brace + 1]
+            
+            service_account_info = json.loads(json_str)
+            cred = credentials.Certificate(service_account_info)
+            firebase_admin.initialize_app(cred, {'databaseURL': DATABASE_URL})
         
-        service_account_info = json.loads(json_str)
-        cred = credentials.Certificate(service_account_info)
-        firebase_admin.initialize_app(cred, {'databaseURL': DATABASE_URL})
+        _firebase_initialized = True
+        return True
     except json.JSONDecodeError as e:
-        st.error(f"Failed to parse SERVICE_ACCOUNT_JSON: {str(e)}")
-        st.error(f"First 200 chars: {SERVICE_ACCOUNT_JSON[:200] if SERVICE_ACCOUNT_JSON else 'None'}")
-        st.error("Make sure SERVICE_ACCOUNT_JSON contains valid JSON without extra quotes or prefixes.")
-        st.stop()
+        _firebase_error = f"Failed to parse SERVICE_ACCOUNT_JSON: {str(e)}"
+        return False
     except Exception as e:
-        st.error(f"Failed to initialize Firebase: {str(e)}")
-        st.stop()
+        _firebase_error = f"Failed to initialize Firebase: {str(e)}"
+        return False
 
 # -------------------------
 # Streamlit UI configuration
@@ -73,33 +89,47 @@ refresh_button = st.sidebar.button("🔄 Manual Refresh")
 # Firebase fetch function
 # -------------------------
 def fetch_data():
-    ref = db.reference("/AccidentEvents")
-    data = ref.get()
-    rows = []
+    if not init_firebase():
+        return pd.DataFrame(columns=["ID", "Acceleration", "Status", "Severity", "Timestamp", "Time"])
+    
+    try:
+        from firebase_admin import db
+        ref = db.reference("/AccidentEvents")
+        data = ref.get()
+        rows = []
 
-    if data and isinstance(data, dict):
-        for key, val in data.items():
-            if isinstance(val, dict):
-                rows.append({
-                    "ID": key,
-                    "Acceleration": val.get("Acceleration", 0),
-                    "Status": val.get("Status", "Unknown"),
-                    "Severity": val.get("Severity", None),
-                    "Timestamp": val.get("Timestamp", 0)
-                })
+        if data and isinstance(data, dict):
+            for key, val in data.items():
+                if isinstance(val, dict):
+                    rows.append({
+                        "ID": key,
+                        "Acceleration": val.get("Acceleration", 0),
+                        "Status": val.get("Status", "Unknown"),
+                        "Severity": val.get("Severity", None),
+                        "Timestamp": val.get("Timestamp", 0)
+                    })
 
-    if rows:
-        df = pd.DataFrame(rows)
-        # Convert timestamp safely
-        df["Time"] = pd.to_datetime(df["Timestamp"], unit='ms', errors='coerce')
-        df = df.sort_values("Time", ascending=False)
-        return df
-    else:
+        if rows:
+            df = pd.DataFrame(rows)
+            # Convert timestamp safely
+            df["Time"] = pd.to_datetime(df["Timestamp"], unit='ms', errors='coerce')
+            df = df.sort_values("Time", ascending=False)
+            return df
+        else:
+            return pd.DataFrame(columns=["ID", "Acceleration", "Status", "Severity", "Timestamp", "Time"])
+    except Exception as e:
+        st.error(f"Error fetching data from Firebase: {str(e)}")
         return pd.DataFrame(columns=["ID", "Acceleration", "Status", "Severity", "Timestamp", "Time"])
 
 # -------------------------
 # Main Section
 # -------------------------
+# Show Firebase connection status
+if not init_firebase():
+    st.error(f"⚠️ Firebase Connection Error: {_firebase_error}")
+    st.info("Please check your environment variables in Render dashboard.")
+    st.stop()
+
 st.info("Fetching latest data from Firebase...")
 df = fetch_data()
 
@@ -151,4 +181,4 @@ else:
 
 # Manual refresh
 if refresh_button:
-    st.experimental_rerun()
+    st.rerun()
