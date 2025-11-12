@@ -22,9 +22,40 @@ if not DATABASE_URL:
     st.stop()
 
 if not firebase_admin._apps:
-    service_account_info = json.loads(SERVICE_ACCOUNT_JSON)
-    cred = credentials.Certificate(service_account_info)
-    firebase_admin.initialize_app(cred, {'databaseURL': DATABASE_URL})
+    try:
+        # Strip whitespace
+        json_str = SERVICE_ACCOUNT_JSON.strip()
+        
+        # Remove surrounding quotes if present (single or double)
+        if (json_str.startswith('"') and json_str.endswith('"')) or \
+           (json_str.startswith("'") and json_str.endswith("'")):
+            json_str = json_str[1:-1]
+        
+        # Handle escaped JSON strings (common in environment variables)
+        json_str = json_str.replace('\\"', '"').replace("\\'", "'")
+        json_str = json_str.replace('\\n', '\n').replace('\\t', '\t')
+        
+        # Try to find the first { character in case there's a prefix
+        first_brace = json_str.find('{')
+        if first_brace > 0:
+            json_str = json_str[first_brace:]
+        
+        # Find the last } character in case there's a suffix
+        last_brace = json_str.rfind('}')
+        if last_brace >= 0 and last_brace < len(json_str) - 1:
+            json_str = json_str[:last_brace + 1]
+        
+        service_account_info = json.loads(json_str)
+        cred = credentials.Certificate(service_account_info)
+        firebase_admin.initialize_app(cred, {'databaseURL': DATABASE_URL})
+    except json.JSONDecodeError as e:
+        st.error(f"Failed to parse SERVICE_ACCOUNT_JSON: {str(e)}")
+        st.error(f"First 200 chars: {SERVICE_ACCOUNT_JSON[:200] if SERVICE_ACCOUNT_JSON else 'None'}")
+        st.error("Make sure SERVICE_ACCOUNT_JSON contains valid JSON without extra quotes or prefixes.")
+        st.stop()
+    except Exception as e:
+        st.error(f"Failed to initialize Firebase: {str(e)}")
+        st.stop()
 
 # -------------------------
 # Streamlit UI configuration
