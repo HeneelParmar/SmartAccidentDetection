@@ -1,0 +1,60 @@
+services:
+  # ===============================
+  # 1. Background Worker (Firebase Listener)
+  # ===============================
+  - type: worker
+    name: smart-accident-listener
+    env: python
+    region: singapore   # or 'frankfurt' / 'oregon' based on your location
+    plan: free
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "python firebase_listener.py"
+    autoDeploy: true
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: SERVICE_ACCOUNT_JSON
+        sync: false
+      - key: MODEL_PATH
+        value: severity_model.pkl
+      - key: ENABLE_SMS
+        value: "true"
+      - key: TWILIO_SID
+        sync: false
+      - key: TWILIO_TOKEN
+        sync: false
+      - key: TWILIO_FROM
+        sync: false
+      - key: ALERT_PHONE
+        sync: false
+      - key: ENABLE_EMAIL
+        value: "true"
+      - key: EMAIL_HOST
+        value: smtp.gmail.com
+      - key: EMAIL_PORT
+        value: "587"
+      - key: EMAIL_USER
+        sync: false
+      - key: EMAIL_PASS
+        sync: false
+      - key: ALERT_EMAIL
+        sync: false
+      - key: POLL_INTERVAL
+        value: "5"
+
+  # ===============================
+  # 2. Web Service (Streamlit Dashboard)
+  # ===============================
+  - type: web
+    name: smart-accident-dashboard
+    env: python
+    region: singapore
+    plan: free
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "streamlit run dashboard.py --server.port $PORT --server.address 0.0.0.0"
+    autoDeploy: true
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: SERVICE_ACCOUNT_JSON
+        sync: false
