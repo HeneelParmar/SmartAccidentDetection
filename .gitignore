@@ -1,0 +1,14 @@
+# Ignore service account credentials and other secrets
+serviceAccountKey.json
+.env
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Model backups
+*.pkl~
+
+# Virtual environments
+venv/
+env/
